@@ -78,8 +78,18 @@
     </div>
   </div>
 
-  <script src="https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.min.js"></script>
-  <script>
+  <!-- Исправление: Подключаем Three.js как ES-модуль через importmap -->
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "https://unpkg.com/three@0.160.0/build/three.module.js"
+      }
+    }
+  </script>
+
+  <script type="module">
+    import * as THREE from 'three';
+
     // ==================== ЛОГИКА ОВЕРЛЕЯ И МОДАЛКИ ====================
     const overlay = document.getElementById('overlay');
     const footerHint = document.getElementById('footerHint');
