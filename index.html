@@ -31,12 +31,6 @@
       color: rgba(255,255,255,0.6); font-size: 0.85rem; z-index: 5; pointer-events: none;
       text-shadow: 0 1px 3px rgba(0,0,0,0.5);
     }
-    /* Индикатор активности (для отладки) */
-    #debug {
-      position: fixed; top: 12px; right: 12px; z-index: 20;
-      background: rgba(10,10,25,0.7); padding: 8px 12px; border-radius: 8px;
-      font-size: 11px; color: #8ad; border: 1px solid rgba(100,180,255,0.3);
-    }
   </style>
 </head>
 <body>
@@ -48,23 +42,15 @@
     </div>
   </div>
   <div class="footer">наведите на точку • зум колёсиком • перетаскивайте</div>
-  <div id="debug">Activity: <span id="val-act">0.40</span></div>
 
-  <script type="importmap">
-    { "imports": { "three": "https://unpkg.com/three@0.160.0/build/three.module.js" } }
-  </script>
-  <script type="module">
-    import * as THREE from 'three';
-
-    // ─────────────────────────────────────────────────────────────
-    // ГЛОБАЛЬНЫЕ ПЕРЕМЕННЫЕ
-    // ─────────────────────────────────────────────────────────────
-    let activityIntensity = 0.4; // 0.0 – 1.0: глобальная активность
+  <!— Three.js подключаем классически —>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.min.js"></script>
+  <script>
+    // ==================== НАСТРОЙКИ ====================
     const TWENTY_FOUR_HOURS = 24 * 60 * 60 * 1000;
+    let activityIntensity = 0.4;
 
-    // ─────────────────────────────────────────────────────────────
-    // СЦЕНА
-    // ─────────────────────────────────────────────────────────────
+    // ==================== СЦЕНА ====================
     const scene = new THREE.Scene();
     const frustumSize = 1000;
     const aspect = window.innerWidth / window.innerHeight;
@@ -79,18 +65,13 @@
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     document.body.prepend(renderer.domElement);
 
-    // ─────────────────────────────────────────────────────────────
-    // ФОН С ШУМОМ ПЕРЛИНА + ДЫХАНИЕ
-    // ─────────────────────────────────────────────────────────────
+    // ==================== ФОН С ШУМОМ ПЕРЛИНА ====================
     const bgGeom = new THREE.PlaneGeometry(2, 2);
     const bgMat = new THREE.ShaderMaterial({
       vertexShader: `varying vec2 vUv; void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }`,
       fragmentShader: `
-        varying vec2 vUv;
-        uniform float uTime;
-        uniform float uIntensity; // ← НОВОЕ: активность
-        
-        // === cnoise (3D Classic Perlin) ===
+        varying vec2 vUv; uniform float uTime; uniform float uIntensity;
+        // cnoise...
         vec3 mod289(vec3 x){return x-floor(x*(1.0/289.0))*289.0;}
         vec4 mod289(vec4 x){return x-floor(x*(1.0/289.0))*289.0;}
         vec4 permute(vec4 x){return mod289(((x*34.0)+1.0)*x);}
@@ -126,29 +107,21 @@
           float n_xyz=mix(n_yz.x,n_yz.y,fade_xyz.x);
           return 2.2*n_xyz;
         }
-        
         void main() {
           vec2 uv = vUv;
-          float scale = 3.5;
-          float timeFactor = 0.2;
-          
-          // === ДЫХАНИЕ: цикл зависит от uIntensity ===
-          float cycle = mix(15.0, 2.0, clamp(uIntensity, 0.0, 1.0));
+          float cycle = mix(14.0, 2.5, clamp(uIntensity, 0.0, 1.0));
           float pulse = 1.0 + 0.12 * sin(uTime * (6.2831 / cycle));
-          
-          float n1 = cnoise(vec3(uv*scale, uTime*timeFactor*0.3));
-          float n2 = cnoise(vec3(uv*scale*1.7+2.0, uTime*timeFactor*0.5+1.0));
-          
+          float n1 = cnoise(vec3(uv*3.5, uTime*0.2*0.3));
+          float n2 = cnoise(vec3(uv*3.5*1.7+2.0, uTime*0.2*0.5+1.0));
           vec3 teal = vec3(0.0, 0.52, 0.52);
           vec3 purple = vec3(0.42, 0.22, 0.52);
           vec3 base = mix(teal, purple, n1*0.5 + 0.5);
-          
           float bright = pulse * (0.72 + 0.38 * n2) * (0.9 + uIntensity*0.2);
           gl_FragColor = vec4(base * bright, 1.0);
         }`,
       uniforms: {
         uTime: { value: 0 },
-        uIntensity: { value: activityIntensity }, // ← ПЕРЕДАЁМ
+        uIntensity: { value: activityIntensity },
         uResolution: { value: new THREE.Vector2(window.innerWidth, window.innerHeight) }
       },
       depthWrite: false
@@ -158,13 +131,11 @@
     bgMesh.frustumCulled = false;
     scene.add(bgMesh);
 
-    // ─────────────────────────────────────────────────────────────
-    // ТОЧКИ-СЛЕДЫ
-    // ─────────────────────────────────────────────────────────────
+    // ==================== ТОЧКИ-СЛЕДЫ ====================
     const allTags = ['радость','грусть','вдохновение','спокойствие','энергия'];
     const traces = [];
-    
-    for (let i = 0; i < 80; i++) {
+    const traceCount = 80;
+    for (let i = 0; i < traceCount; i++) {
       const tag = allTags[Math.floor(Math.random() * allTags.length)];
       traces.push({
         id: i,
@@ -172,30 +143,31 @@
         x: (Math.random() - 0.5) * 600,
         y: (Math.random() - 0.5) * 600,
         state: 'stasis',
-        baseSize: 10 + Math.random() * 5,
-        phase: Math.random() * 6.2831,
-        hue: allTags.indexOf(tag) / allTags.length,
-        createdAt: Date.now(), // ← ДЛЯ УГАСАНИЯ
+        baseSize: 12,
+        phase: Math.random() * Math.PI * 2,
+        createdAt: Date.now(),
         maxAge: TWENTY_FOUR_HOURS,
-        audioAmp: 0.3 + Math.random() * 0.7, // ← ДЛЯ РЕЗОНАНСА
+        audioAmp: 0.3 + Math.random() * 0.7,
         audioFreq: 0.8 + Math.random() * 2.5
       });
     }
 
-    const posArr = new Float32Array(traces.length * 3);
-    const sizeArr = new Float32Array(traces.length);
-    const phaseArr = new Float32Array(traces.length);
-    const stateArr = new Float32Array(traces.length);
-    const colorArr = new Float32Array(traces.length * 3);
-    const ageArr = new Float32Array(traces.length); // ← НОВОЕ: возраст
+    // Геометрия с атрибутами
+    const posArr = new Float32Array(traceCount * 3);
+    const sizeArr = new Float32Array(traceCount);
+    const phaseArr = new Float32Array(traceCount);
+    const stateArr = new Float32Array(traceCount);
+    const colorArr = new Float32Array(traceCount * 3);
+    const ageArr = new Float32Array(traceCount);
 
     traces.forEach((t, i) => {
       posArr[i*3] = t.x; posArr[i*3+1] = t.y; posArr[i*3+2] = 0;
       sizeArr[i] = t.baseSize;
       phaseArr[i] = t.phase;
-      stateArr[i] = 0; // stasis
+      stateArr[i] = 0;
       ageArr[i] = 0;
-      const col = new THREE.Color().setHSL(t.hue, 0.75, 0.65);
+      const hue = allTags.indexOf(t.tags[0]) / allTags.length;
+      const col = new THREE.Color().setHSL(hue, 0.75, 0.65);
       colorArr[i*3] = col.r; colorArr[i*3+1] = col.g; colorArr[i*3+2] = col.b;
     });
 
@@ -205,7 +177,7 @@
     pointsGeom.setAttribute('aPhase', new THREE.BufferAttribute(phaseArr, 1));
     pointsGeom.setAttribute('aState', new THREE.BufferAttribute(stateArr, 1));
     pointsGeom.setAttribute('aColor', new THREE.BufferAttribute(colorArr, 3));
-    pointsGeom.setAttribute('aAge', new THREE.BufferAttribute(ageArr, 1)); // ← ДОБАВЛЯЕМ
+    pointsGeom.setAttribute('aAge', new THREE.BufferAttribute(ageArr, 1));
 
     const pointsMat = new THREE.ShaderMaterial({
       vertexShader: `
@@ -220,21 +192,16 @@
         varying float vAge;
         uniform float uTime;
         uniform float uZoom;
-        
-        void main(){
+        void main() {
           vec3 pos = position;
-          
-          // === РЕЗОНАНС: вибрация на основе аудио-данных ===
           if (aState == 2.0) {
             float shake = sin(uTime * 18.0 + aPhase * 12.0) * aAge * 0.8;
             pos.x += shake;
             pos.y += shake * 0.6;
           }
-          
           vec4 mvPosition = modelViewMatrix * vec4(pos, 1.0);
-          gl_PointSize = size * uZoom * (200.0 / -mvPosition.z) * (1.0 - aAge * 0.3);
+          gl_PointSize = size * uZoom * (180.0 / -mvPosition.z) * (1.0 - aAge * 0.4);
           gl_Position = projectionMatrix * mvPosition;
-          
           vState = aState;
           vPhase = aPhase;
           vColor = aColor;
@@ -246,77 +213,53 @@
         varying vec3 vColor;
         varying float vAge;
         uniform float uTime;
-        uniform float uZoom;
-        uniform float uHovered; // ← ИСПРАВЛЕНО: теперь работает
-        
-        void main(){
+        uniform float uHovered;
+        void main() {
           vec2 uv = gl_PointCoord - 0.5;
           float dist = length(uv);
           if (dist > 0.52) discard;
-          
           float alpha = 0.0;
           vec3 col = vColor;
-          
-          // === УГАСАНИЕ: плавное снижение яркости ===
           float decay = 1.0 - smoothstep(0.7, 1.0, vAge);
           
           if (vState == 0.0) {
-            // СТАЗИС: индивидуальная пульсация
             float pulse = 0.65 + 0.35 * sin(uTime * 1.8 + vPhase);
             alpha = smoothstep(0.5, 0.05, dist) * pulse;
-          } 
-          else if (vState == 1.0) {
-            // ЭМИССИЯ: северное сияние (активируется при uHovered > 0.5)
+          } else if (vState == 1.0) {
             float angle = atan(uv.y, uv.x);
             float aurora = sin(angle * 7.0 + uTime * 2.5) * 0.5 + 0.5;
             vec3 auroraCol = mix(vec3(0.1, 0.95, 0.7), vec3(0.75, 0.3, 0.95), aurora);
             col = mix(col, auroraCol, uHovered * 0.9);
             alpha = smoothstep(0.65, 0.1, dist) * (0.85 + uHovered * 0.15);
-          } 
-          else if (vState == 2.0) {
-            // РЕЗОНАНС: яркое мерцание
+          } else if (vState == 2.0) {
             float flicker = 0.7 + 0.3 * sin(uTime * 10.0 + vPhase * 5.0);
             alpha = smoothstep(0.5, 0.0, dist) * flicker;
             col = mix(col, vec3(1.0, 0.6, 0.8), 0.3);
           }
-          
-          // Применяем угасание
           alpha *= decay;
           col *= decay;
-          
-          // Добавляем мягкое свечение по краям
-          float glow = smoothstep(0.3, 0.0, dist) * 0.2;
-          alpha += glow * decay;
-          
           gl_FragColor = vec4(col, clamp(alpha, 0.0, 1.0));
         }`,
-      uniforms: { 
-        uTime: { value: 0 }, 
-        uZoom: { value: 1.0 }, 
-        uHovered: { value: 0.0 } // ← ИСПРАВЛЕНО: будет обновляться
-      },
-      transparent: true, 
-      depthWrite: false, 
+      uniforms: { uTime: { value: 0 }, uZoom: { value: 1.0 }, uHovered: { value: 0.0 } },
+      transparent: true,
+      depthWrite: false,
       blending: THREE.AdditiveBlending
     });
-    
+
     const points = new THREE.Points(pointsGeom, pointsMat);
     scene.add(points);
 
-    // ─────────────────────────────────────────────────────────────
-    // КАМЕРА: ПАНОРАМИРОВАНИЕ И ЗУМ
-    // ─────────────────────────────────────────────────────────────
+    // ==================== КАМЕРА ====================
     let zoom = 1.0;
     const target = new THREE.Vector2(0, 0);
-    
     function updateCamera() {
-      const aspect = window.innerWidth / window.innerHeight;
-      const w = frustumSize * aspect / zoom;
+      const a = window.innerWidth / window.innerHeight;
+      const w = frustumSize * a / zoom;
       const h = frustumSize / zoom;
-      camera.left = target.x - w / 2;
-      camera.right = target.x + w / 2;
-      camera.top = target.y + h / 2;
-      camera.bottom = target.y - h / 2;
+      camera.left = target.x - w/2;
+      camera.right = target.x + w/2;
+      camera.top = target.y + h/2;
+      camera.bottom = target.y - h/2;
       camera.updateProjectionMatrix();
     }
     updateCamera();
@@ -329,48 +272,34 @@
     }, { passive: false });
 
     let isDragging = false, lastMouse = new THREE.Vector2();
-    
-    window.addEventListener('mousedown', e => {
-      if (e.button === 0) {
-        isDragging = true;
-        lastMouse.set(e.clientX, e.clientY);
-      }
-    });
-    
+    window.addEventListener('mousedown', e => { if(e.button===0){ isDragging=true; lastMouse.set(e.clientX,e.clientY); } });
     window.addEventListener('mousemove', e => {
-      if (isDragging) {
-        const dx = e.clientX - lastMouse.x;
-        const dy = e.clientY - lastMouse.y;
-        const aspect = window.innerWidth / window.innerHeight;
-        target.x -= dx * (frustumSize * aspect / zoom) / window.innerWidth;
+      if(isDragging) {
+        const dx = e.clientX - lastMouse.x, dy = e.clientY - lastMouse.y;
+        const a = window.innerWidth / window.innerHeight;
+        target.x -= dx * (frustumSize * a / zoom) / window.innerWidth;
         target.y += dy * (frustumSize / zoom) / window.innerHeight;
         lastMouse.set(e.clientX, e.clientY);
         updateCamera();
       }
     });
-    
     window.addEventListener('mouseup', () => { isDragging = false; });
 
-    // Тач-поддержка
+    // Тач
     window.addEventListener('touchstart', e => {
-      if (e.touches.length === 1) {
-        isDragging = true;
-        lastMouse.set(e.touches[0].clientX, e.touches[0].clientY);
-      }
-    }, { passive: true });
-    
+      if(e.touches.length===1){ isDragging=true; lastMouse.set(e.touches[0].clientX, e.touches[0].clientY); }
+    }, {passive:true});
     window.addEventListener('touchmove', e => {
-      if (isDragging && e.touches.length === 1) {
-        const dx = e.touches[0].clientX - lastMouse.x;
-        const dy = e.touches[0].clientY - lastMouse.y;
-        const aspect = window.innerWidth / window.innerHeight;
-        target.x -= dx * (frustumSize * aspect / zoom) / window.innerWidth;
+      if(isDragging && e.touches.length===1){
+        const dx = e.touches[0].clientX - lastMouse.x, dy = e.touches[0].clientY - lastMouse.y;
+        const a = window.innerWidth / window.innerHeight;
+        target.x -= dx * (frustumSize * a / zoom) / window.innerWidth;
         target.y += dy * (frustumSize / zoom) / window.innerHeight;
         lastMouse.set(e.touches[0].clientX, e.touches[0].clientY);
         updateCamera();
+        e.preventDefault();
       }
-    }, { passive: false });
-    
+    }, {passive:false});
     window.addEventListener('touchend', () => { isDragging = false; });
 
     window.addEventListener('resize', () => {
@@ -379,209 +308,108 @@
       updateCamera();
     });
 
-    // ─────────────────────────────────────────────────────────────
-    // СОЗВЕЗДИЯ (линии при наведении)
-    // ─────────────────────────────────────────────────────────────
+    // ==================== СОЗВЕЗДИЯ ====================
     let lines = null;
-    
     function showConstellations(idx) {
-      if (lines) {
-        scene.remove(lines);
-        lines.geometry.dispose();
-        lines.material.dispose();
-        lines = null;
-      }
+      if(lines){ scene.remove(lines); lines.geometry.dispose(); lines.material.dispose(); lines=null; }
       const center = traces[idx];
       const connected = [];
-      
       traces.forEach((t, i) => {
-        if (i !== idx && t.tags.some(tag => center.tags.includes(tag))) {
-          connected.push(i);
-        }
+        if(i!==idx && t.tags.some(tag=>center.tags.includes(tag))) connected.push(i);
       });
-      
-      if (connected.length === 0) return;
-      
-      const arr = [];
-      connected.forEach(i => {
-        arr.push(center.x, center.y, 0, traces[i].x, traces[i].y, 0);
-      });
-      
+      if(!connected.length) return;
+      const verts = [];
+      connected.forEach(i => verts.push(center.x, center.y, 0, traces[i].x, traces[i].y, 0));
       const geom = new THREE.BufferGeometry();
-      geom.setAttribute('position', new THREE.BufferAttribute(new Float32Array(arr), 3));
-      lines = new THREE.LineSegments(
-        geom, 
-        new THREE.LineBasicMaterial({ 
-          color: 0x99bbff, 
-          opacity: 0.35, 
-          transparent: true,
-          linewidth: 1
-        })
-      );
+      geom.setAttribute('position', new THREE.BufferAttribute(new Float32Array(verts), 3));
+      lines = new THREE.LineSegments(geom, new THREE.LineBasicMaterial({ color:0x99bbff, opacity:0.35, transparent:true }));
       scene.add(lines);
     }
 
-    // ─────────────────────────────────────────────────────────────
-    // RAYCASTER ДЛЯ ХОВЕРА + HAPTIC
-    // ─────────────────────────────────────────────────────────────
+    // ==================== ХОВЕР ====================
     const raycaster = new THREE.Raycaster();
     const mouse = new THREE.Vector2();
     let hoveredIndex = -1;
-    
+
     window.addEventListener('mousemove', e => {
       mouse.x = (e.clientX / window.innerWidth) * 2 - 1;
       mouse.y = -(e.clientY / window.innerHeight) * 2 + 1;
-      
       raycaster.setFromCamera(mouse, camera);
       const intersects = raycaster.intersectObject(points);
-      
-      if (intersects.length > 0 && !isDragging) {
+      if(intersects.length && !isDragging) {
         const idx = intersects[0].index;
-        
-        if (hoveredIndex !== idx) {
-          // Сброс предыдущего
-          if (hoveredIndex >= 0) {
-            stateArr[hoveredIndex] = 0;
-          }
-          // Активация нового
-          stateArr[idx] = 1; // emission
-          hoveredIndex = idx;
-          
-          pointsGeom.attributes.aState.needsUpdate = true;
-          pointsMat.uniforms.uHovered.value = 1.0; // ← ИСПРАВЛЕНО: включаем аврору
-          
+        if(hoveredIndex !== idx) {
+          if(hoveredIndex>=0){ stateArr[hoveredIndex]=0; }
+          stateArr[idx]=1;
+          hoveredIndex=idx;
+          pointsGeom.attributes.aState.needsUpdate=true;
+          pointsMat.uniforms.uHovered.value=1.0;
           showConstellations(idx);
-          
-          // Haptic feedback
-          if (navigator.vibrate) {
-            navigator.vibrate(15);
-          }
+          if(navigator.vibrate) navigator.vibrate(15);
         }
-      } else {
-        if (hoveredIndex >= 0) {
-          stateArr[hoveredIndex] = 0;
-          pointsGeom.attributes.aState.needsUpdate = true;
-          pointsMat.uniforms.uHovered.value = 0.0; // ← ИСПРАВЛЕНО: выключаем аврору
-          hoveredIndex = -1;
-          
-          if (lines) {
-            scene.remove(lines);
-            lines.geometry.dispose();
-            lines.material.dispose();
-            lines = null;
-          }
-        }
+      } else if(hoveredIndex>=0) {
+        stateArr[hoveredIndex]=0;
+        pointsGeom.attributes.aState.needsUpdate=true;
+        pointsMat.uniforms.uHovered.value=0.0;
+        hoveredIndex=-1;
+        if(lines){ scene.remove(lines); lines.geometry.dispose(); lines.material.dispose(); lines=null; }
       }
     });
 
-    // Haptic по клику
     window.addEventListener('click', () => {
-      if (hoveredIndex >= 0 && navigator.vibrate) {
-        navigator.vibrate([10, 20, 10]);
-      }
+      if(hoveredIndex>=0 && navigator.vibrate) navigator.vibrate([10,20,10]);
     });
 
-    // ─────────────────────────────────────────────────────────────
-    // КНОПКА "ВОЙТИ В СОЗВЕЗДИЕ"
-    // ─────────────────────────────────────────────────────────────
-    document.getElementById('enterBtn').addEventListener('click', (e) => {
+    // ==================== КНОПКА «Войти» ====================
+    const overlay = document.getElementById('overlay');
+    document.getElementById('enterBtn').addEventListener('click', e => {
       e.preventDefault();
-      const overlay = document.getElementById('overlay');
       overlay.classList.add('hidden');
-      
-      // Плавный зум на случайную точку
-      const randomIdx = Math.floor(Math.random() * traces.length);
-      target.x = traces[randomIdx].x;
-      target.y = traces[randomIdx].y;
+      // зум к случайной точке
+      const ri = Math.floor(Math.random() * traces.length);
+      target.x = traces[ri].x;
+      target.y = traces[ri].y;
       zoom = 1.8;
       updateCamera();
     });
 
-    // ─────────────────────────────────────────────────────────────
-    // ОБНОВЛЕНИЕ ВОЗРАСТА ТОЧЕК (УГАСАНИЕ)
-    // ─────────────────────────────────────────────────────────────
-    function updateTraceAges() {
+    // ==================== УГАСАНИЕ (возраст) ====================
+    function updateAge() {
       const now = Date.now();
-      const ageAttr = pointsGeom.attributes.aAge;
-      let needsUpdate = false;
-      
-      for (let i = 0; i < traces.length; i++) {
+      for(let i=0; i<traces.length; i++) {
         const t = traces[i];
         const age = Math.min((now - t.createdAt) / t.maxAge, 1.0);
-        
-        if (Math.abs(ageAttr.getX(i) - age) > 0.005) {
-          ageAttr.setX(i, age);
-          needsUpdate = true;
-        }
-        
-        // Конвертация в "микро-туманность" при полном угасании
-        if (age >= 0.99 && t.state !== 'decayed') {
+        ageArr[i] = age;
+        if(age >= 0.99 && t.state !== 'decayed') {
           t.state = 'decayed';
-          stateArr[i] = 0; // переводим в стазис (фон)
+          stateArr[i] = 0;
           pointsGeom.attributes.aState.needsUpdate = true;
-          
-          // Вибрация при "последнем вздохе"
-          if (navigator.vibrate) navigator.vibrate(8);
+          if(navigator.vibrate) navigator.vibrate(8);
         }
       }
-      
-      if (needsUpdate) {
-        ageAttr.needsUpdate = true;
-      }
+      pointsGeom.attributes.aAge.needsUpdate = true;
     }
+    setInterval(updateAge, 5000); // раз в 5 сек
 
-    // ─────────────────────────────────────────────────────────────
-    // ДЕМО: АВТО-ИЗМЕНЕНИЕ АКТИВНОСТИ (для теста "дыхания")
-    // ─────────────────────────────────────────────────────────────
-    setInterval(() => {
-      // Плавная синусоида + небольшой рандом для естественности
-      activityIntensity = 0.35 + Math.sin(Date.now() * 0.0004) * 0.35 + Math.random() * 0.1;
-      activityIntensity = THREE.MathUtils.clamp(activityIntensity, 0.0, 1.0);
-      
-      bgMat.uniforms.uIntensity.value = activityIntensity;
-      document.getElementById('val-act').textContent = activityIntensity.toFixed(2);
-    }, 1500);
-
-    // ─────────────────────────────────────────────────────────────
-    // АНИМАЦИОННЫЙ ЦИКЛ
-    // ─────────────────────────────────────────────────────────────
+    // ==================== АНИМАЦИЯ ====================
     function animate() {
       requestAnimationFrame(animate);
       const t = performance.now() * 0.001;
-      
-      // Обновляем шейдеры
       bgMat.uniforms.uTime.value = t;
       pointsMat.uniforms.uTime.value = t;
       pointsMat.uniforms.uZoom.value = zoom;
-      
-      // Обновляем возраст точек (угасание)
-      updateTraceAges();
-      
-      // Рендер
       renderer.render(scene, camera);
     }
-    
     animate();
 
-    // ─────────────────────────────────────────────────────────────
-    // ПУБЛИЧНЫЙ API (для интеграции с бэкендом / приложением)
-    // ─────────────────────────────────────────────────────────────
-    window.UniverseAPI = {
-      setActivity: (val) => {
-        activityIntensity = THREE.MathUtils.clamp(val, 0, 1);
-        bgMat.uniforms.uIntensity.value = activityIntensity;
-      },
-      addTrace: (data) => {
-        // Упрощённая версия: добавляет точку в реальном времени
-        // Для продакшена нужно расширять буферы динамически
-        console.log('addTrace:', data);
-      },
-      getState: () => ({
-        activity: activityIntensity,
-        traceCount: traces.length,
-        zoom: zoom
-      })
-    };
+    // ==================== ГЛОБАЛЬНАЯ АКТИВНОСТЬ (демо) ====================
+    setInterval(() => {
+      activityIntensity = 0.35 + Math.sin(Date.now() * 0.0004) * 0.35 + Math.random() * 0.1;
+      activityIntensity = THREE.MathUtils.clamp(activityIntensity, 0, 1);
+      bgMat.uniforms.uIntensity.value = activityIntensity;
+    }, 1500);
+
+    console.log('✨ Universe ready');
   </script>
 </body>
 </html>
