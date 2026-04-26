@@ -78,18 +78,8 @@
     </div>
   </div>
 
-  <!-- Исправление: Подключаем Three.js как ES-модуль через importmap -->
-  <script type="importmap">
-    {
-      "imports": {
-        "three": "https://unpkg.com/three@0.160.0/build/three.module.js"
-      }
-    }
-  </script>
-
-  <script type="module">
-    import * as THREE from 'three';
-
+  <script src="https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.min.js"></script>
+  <script>
     // ==================== ЛОГИКА ОВЕРЛЕЯ И МОДАЛКИ ====================
     const overlay = document.getElementById('overlay');
     const footerHint = document.getElementById('footerHint');
@@ -128,7 +118,7 @@
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     document.body.prepend(renderer.domElement);
 
-    // --- ПРОСТОЙ ФОН: пульсирующий градиент ---
+    // --- ФОН: яркий градиент, чтобы было видно даже без точек ---
     const bgGeom = new THREE.PlaneGeometry(2, 2);
     const bgMat = new THREE.ShaderMaterial({
       vertexShader: `
@@ -139,10 +129,10 @@
         varying vec2 vUv;
         uniform float uTime;
         void main() {
-          float pulse = 0.7 + 0.3 * sin(uTime * 0.6 + vUv.x * 2.0);
-          vec3 teal = vec3(0.0, 0.55, 0.55);
-          vec3 purple = vec3(0.45, 0.25, 0.55);
-          vec3 col = mix(teal, purple, vUv.x * 0.5 + 0.5 + 0.2 * sin(uTime * 0.3));
+          float pulse = 0.5 + 0.5 * sin(uTime * 0.8 + vUv.x * 2.0);
+          vec3 teal = vec3(0.0, 0.7, 0.7);
+          vec3 purple = vec3(0.5, 0.3, 0.8);
+          vec3 col = mix(teal, purple, vUv.x * 0.5 + 0.5);
           gl_FragColor = vec4(col * pulse, 1.0);
         }
       `,
@@ -154,11 +144,10 @@
     bgMesh.frustumCulled = false;
     scene.add(bgMesh);
 
-    // --- ТОЧКИ-ЗВЁЗДЫ (используем стандартный PointsMaterial) ---
+    // --- ТОЧКИ-ЗВЁЗДЫ (увеличенные) ---
     const tracesCount = 80;
     const positions = new Float32Array(tracesCount * 3);
     const colors = new Float32Array(tracesCount * 3);
-    const sizes = new Float32Array(tracesCount);
     const allTags = ['радость','грусть','вдохновение','спокойствие','энергия'];
     const traces = [];
 
@@ -168,51 +157,42 @@
       positions[i * 3 + 1] = (Math.random() - 0.5) * 600;
       positions[i * 3 + 2] = 0;
       const hue = allTags.indexOf(tag) / allTags.length;
-      const color = new THREE.Color().setHSL(hue, 0.7, 0.6);
+      const color = new THREE.Color().setHSL(hue, 0.9, 0.7); // ярче
       colors[i * 3] = color.r;
       colors[i * 3 + 1] = color.g;
       colors[i * 3 + 2] = color.b;
-      sizes[i] = 8 + Math.random() * 5;
-      traces.push({ id: i, tags: [tag], x: positions[i * 3], y: positions[i * 3 + 1], state: 0 });
+      traces.push({ id: i, tags: [tag], x: positions[i * 3], y: positions[i * 3 + 1] });
     }
 
     const pointsGeom = new THREE.BufferGeometry();
     pointsGeom.setAttribute('position', new THREE.BufferAttribute(positions, 3));
     pointsGeom.setAttribute('color', new THREE.BufferAttribute(colors, 3));
-    pointsGeom.setAttribute('size', new THREE.BufferAttribute(sizes, 1));
 
-    // Шейдерный материал с поддержкой переменного размера и пульсации
-    const pointsVert = `
-      attribute float size;
-      varying vec3 vColor;
-      uniform float uTime;
-      void main() {
-        vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
-        // Пульсация размера
-        float pulse = 0.7 + 0.3 * sin(uTime * 3.0 + position.x * 0.1 + position.y * 0.1);
-        gl_PointSize = size * pulse * (200.0 / -mvPosition.z);
-        gl_Position = projectionMatrix * mvPosition;
-        vColor = color;
-      }
-    `;
-    const pointsFrag = `
-      varying vec3 vColor;
-      void main() {
-        vec2 uv = gl_PointCoord - 0.5;
-        float dist = length(uv);
-        float alpha = smoothstep(0.5, 0.1, dist);
-        gl_FragColor = vec4(vColor, alpha);
-      }
-    `;
-    const pointsMat = new THREE.ShaderMaterial({
-      vertexShader: pointsVert,
-      fragmentShader: pointsFrag,
-      uniforms: { uTime: { value: 0 } },
-      transparent: true,
-      depthWrite: false,
+    // Используем простой PointsMaterial с vertexColors – без шейдеров
+    const pointsMat = new THREE.PointsMaterial({
+      size: 12,               // Увеличиваем базовый размер
+      vertexColors: true,
       blending: THREE.AdditiveBlending,
-      vertexColors: true
+      depthWrite: false,
+      transparent: true,
+      map: createGlowTexture(), // добавим текстуру круга для мягкости
     });
+
+    function createGlowTexture() {
+      const canvas = document.createElement('canvas');
+      canvas.width = 32;
+      canvas.height = 32;
+      const ctx = canvas.getContext('2d');
+      ctx.beginPath();
+      ctx.arc(16, 16, 14, 0, 2 * Math.PI);
+      const gradient = ctx.createRadialGradient(16, 16, 0, 16, 16, 14);
+      gradient.addColorStop(0, 'rgba(255,255,255,1)');
+      gradient.addColorStop(0.5, 'rgba(255,255,255,0.9)');
+      gradient.addColorStop(1, 'rgba(255,255,255,0)');
+      ctx.fillStyle = gradient;
+      ctx.fill();
+      return new THREE.CanvasTexture(canvas);
+    }
 
     const points = new THREE.Points(pointsGeom, pointsMat);
     scene.add(points);
@@ -299,7 +279,6 @@
     const raycaster = new THREE.Raycaster();
     const mouse = new THREE.Vector2();
     let hoveredIndex = -1;
-
     window.addEventListener('mousemove', e => {
       if (isDragging) return;
       mouse.x = (e.clientX / window.innerWidth) * 2 - 1;
@@ -323,7 +302,6 @@
       }
     });
 
-    // Вибрация при клике по точке
     window.addEventListener('click', () => {
       if (hoveredIndex >= 0 && navigator.vibrate) navigator.vibrate(50);
     });
@@ -331,13 +309,12 @@
     // --- АНИМАЦИЯ ---
     function animate() {
       requestAnimationFrame(animate);
-      const t = performance.now() * 0.001;
-      bgMat.uniforms.uTime.value = t;
-      pointsMat.uniforms.uTime.value = t;
+      bgMat.uniforms.uTime.value = performance.now() * 0.001;
       renderer.render(scene, camera);
     }
     animate();
-    console.log('✨ Карта следов активна');
+
+    console.log('✅ Карта следов запущена. Точек:', tracesCount, 'Размер точек:', pointsMat.size);
   </script>
 </body>
 </html>
